@@ -1,5 +1,0 @@
-{
-    // For linting purpose
-	"extends": "./tsconfig.json",
-	"include": ["types", "src", "test"]
-}
