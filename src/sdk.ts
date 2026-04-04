@@ -8,7 +8,6 @@ export class StarOverlaySDK extends Emitter {
     public widgetToken: string | null;
     public widget: Partial<IWidget> = {};
     public preview: boolean;
-    public backendUrl: string;
     public uploadContentUrl: string;
     public enabled: boolean = true;
     public integrations: IIntegration[] = [];
@@ -22,9 +21,6 @@ export class StarOverlaySDK extends Emitter {
         const urlParams = new URL(window.location.href).searchParams;
         this.widgetToken = urlParams.get('token');
         this.preview = urlParams.get('preview') === 'true';
-
-        // @ts-ignore
-        this.backendUrl = urlParams.get('apiUrl') ?? import.meta.env.VITE_API_URL ?? "https://api.staroverlay.com";
 
         // @ts-ignore
         this.uploadContentUrl = urlParams.get('mediaUrl') ?? import.meta.env.VITE_MEDIA_URL ?? "https://cdn.staroverlay.com";
@@ -104,7 +100,7 @@ export class StarOverlaySDK extends Emitter {
             return;
         }
 
-        const wsUrl = this.backendUrl.replace(/^http/, 'ws') + "/events/widget?token=" + encodeURIComponent(this.widgetToken);
+        const wsUrl = "/events/widget?token=" + encodeURIComponent(this.widgetToken);
         const socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
