@@ -1,13 +1,13 @@
 import { Emitter } from "./emitter";
 import { IIntegration, IWidget, State } from "./types";
 
-
 export class StarOverlaySDK extends Emitter {
     public state: State = "loading";
     public settings: Record<string, any> = {};
     public widgetToken: string | null;
     public widget: Partial<IWidget> = {};
     public preview: boolean;
+    public apiUrl: string;
     public uploadContentUrl: string;
     public enabled: boolean = true;
     public integrations: IIntegration[] = [];
@@ -22,6 +22,10 @@ export class StarOverlaySDK extends Emitter {
         this.widgetToken = urlParams.get('token');
         this.preview = urlParams.get('preview') === 'true';
 
+        // Resolve API and Media URLs
+        // Falls back to localhost defaults for development if not provided
+        // @ts-ignore
+        this.apiUrl = urlParams.get('apiUrl') ?? import.meta.env.VITE_API_URL ?? "https://api.staroverlay.com";
         // @ts-ignore
         this.uploadContentUrl = urlParams.get('mediaUrl') ?? import.meta.env.VITE_MEDIA_URL ?? "https://cdn.staroverlay.com";
 
@@ -50,7 +54,6 @@ export class StarOverlaySDK extends Emitter {
         this.state = newState;
         const appEl = document.getElementById('app') as any;
         if (appEl) {
-            // For backward compatibility with CSS/Logic
             appEl.state = newState;
             appEl.setAttribute('state', newState);
         }
@@ -61,10 +64,7 @@ export class StarOverlaySDK extends Emitter {
      * Subscribe to events from a specific integration
      */
     public subscribe<T = any>(integrationId: string, eventId: string, callback?: (data: T) => void) {
-        if (!integrationId || !this.integrations.some(i => i.id === integrationId)) {
-            console.warn(`StarOverlay: Integration ${integrationId} not found`);
-            return false;
-        }
+        if (!integrationId) return false;
 
         const topic = `${integrationId}.${eventId}`;
         const alreadySubscribed = this.subscriptions.some(
@@ -100,11 +100,80 @@ export class StarOverlaySDK extends Emitter {
             return;
         }
 
-        const wsUrl = "/events/widget?token=" + encodeURIComponent(this.widgetToken);
+        try {
+            // 1. Fetch initial configuration DIRECTLY from the backend SDK endpoint
+            const configUrl = `${this.apiUrl.replace(/\/$/, '')}/sdk/widget-config?token=${encodeURIComponent(this.widgetToken)}`;
+            const response = await fetch(configUrl);
+
+            if (!response.ok) {
+                throw new Error(`Failed to load widget config: ${response.status}`);
+            }
+
+            const payload = await response.json();
+
+            if (payload.error) {
+                throw new Error(payload.error);
+            }
+
+            const { widget, integrations } = payload;
+
+            this.widget = widget;
+            this.integrations = integrations || [];
+
+            try {
+                this.settings = typeof widget.settings === 'string'
+                    ? JSON.parse(widget.settings)
+                    : (widget.settings || {});
+            } catch (e) {
+                console.error("StarOverlay: Failed to parse widget settings", e);
+                this.settings = {};
+            }
+
+            this.enabled = widget.enabled !== false;
+            this.setState("ok");
+            this.emit("ready", this);
+
+            // 2. Initialize Event WebSocket
+            this.initSocket();
+
+        } catch (err: any) {
+            console.error("StarOverlay: Initialization failed", err);
+            this.error = err.message;
+            this.setState("error");
+            this.emit("error", err);
+        }
+    }
+
+    private initSocket() {
+        if (!this.widgetToken) return;
+
+        // Use the same host as the API but with the websocket protocol
+        // (Unless overridden via eventsUrl)
+        const urlParams = new URL(window.location.href).searchParams;
+        const eventsUrlStr = urlParams.get('eventsUrl');
+
+        let wsUrl: string;
+
+        if (eventsUrlStr) {
+            wsUrl = eventsUrlStr.startsWith('ws')
+                ? eventsUrlStr
+                : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${eventsUrlStr}`;
+        } else {
+            // Derive WS URL from the API URL
+            const url = new URL(this.apiUrl);
+            const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+            wsUrl = `${protocol}//${url.host}/events/widget`;
+        }
+
+        if (!wsUrl.includes('token=')) {
+            wsUrl += (wsUrl.includes('?') ? '&' : '?') + `token=${encodeURIComponent(this.widgetToken)}`;
+        }
+
+        console.log(`StarOverlay: Connecting to events at ${wsUrl}`);
         const socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
-            console.log("StarOverlay: Connected to server");
+            console.log("StarOverlay: Event session connected");
             // Resubscribe to existing topics on reconnection
             this.subscriptions.forEach(sub => {
                 this.send("subscribe", sub);
@@ -114,25 +183,11 @@ export class StarOverlaySDK extends Emitter {
         socket.onmessage = (event) => {
             try {
                 const payload = JSON.parse(event.data);
-                console.log("StarOverlay: Received message", payload);
 
-                if (payload.event === "widget:data") {
-                    const data = payload.data;
-                    this.widget = data;
-                    this.integrations = data.integrations || [];
-
-                    try {
-                        this.settings = typeof data.settings === 'string'
-                            ? JSON.parse(data.settings)
-                            : (data.settings || {});
-                    } catch (e) {
-                        console.error("StarOverlay: Failed to parse widget settings", e);
-                        this.settings = {};
-                    }
-
-                    this.enabled = data.enabled !== false;
-                    this.setState("ok");
-                    this.emit("ready", this);
+                if (payload.event === "integration:event") {
+                    const { integrationId, eventId, event: eventData } = payload.data;
+                    const topic = `${integrationId}.${eventId}`;
+                    this.emit(`event:${topic}`, eventData);
                 }
 
                 if (payload.event === "widget:settings_update") {
@@ -143,17 +198,6 @@ export class StarOverlaySDK extends Emitter {
                 if (payload.event === "widget:toggle") {
                     this.enabled = payload.data.enabled !== false;
                     this.emit("toggle", this.enabled);
-                    if (!this.enabled) {
-                        // Optionally handle disabled state
-                    } else {
-                        this.setState("ok");
-                    }
-                }
-
-                if (payload.event === "integration:event") {
-                    const { integrationId, eventId, event: eventData } = payload.data;
-                    const topic = `${integrationId}.${eventId}`;
-                    this.emit(`event:${topic}`, eventData);
                 }
 
                 // Generic event emission
@@ -163,28 +207,20 @@ export class StarOverlaySDK extends Emitter {
             } catch (e) {
                 if (event.data === "pong") {
                     this.emit("pong");
-                } else {
-                    console.error("Error parsing message", e);
                 }
             }
         };
 
-        socket.onerror = (err) => {
-            console.error("StarOverlay: WebSocket error", err);
-            this.error = "WebSocket error";
-            this.setState("error");
-            this.emit("error", err);
+        socket.onclose = (event) => {
+            console.log("StarOverlay: Event session disconnected", event.code);
+            // Reconnect after 3s
+            setTimeout(() => {
+                if (this.state !== "error") this.initSocket();
+            }, 3000);
         };
 
-        socket.onclose = (event) => {
-            console.log("StarOverlay: Disconnected", event.code, event.reason);
-            this.setState("loading");
-
-            // Auto-reconnect after 3 seconds
-            setTimeout(() => {
-                console.log("StarOverlay: Attempting to reconnect...");
-                this.init();
-            }, 3000);
+        socket.onerror = (err) => {
+            console.error("StarOverlay: Socket error", err);
         };
 
         this.socket = socket;
