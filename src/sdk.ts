@@ -73,7 +73,8 @@ export class StarOverlaySDK extends Emitter {
 
         if (!alreadySubscribed) {
             this.subscriptions.push({ integrationId, eventId });
-            this.send("subscribe", { integrationId, eventId });
+            // Legacy SDK sent subscribe commands, now we just track it locally
+            // since the events-server broadcasts all allowed topics.
         }
 
         if (callback) {
@@ -162,27 +163,34 @@ export class StarOverlaySDK extends Emitter {
             // Derive WS URL from the API URL
             const url = new URL(this.apiUrl);
             const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-            wsUrl = `${protocol}//${url.host}/events/widget`;
+            wsUrl = `${protocol}//${url.host}/ws`; // Connecting to /ws on the api/events-server host
         }
 
-        if (!wsUrl.includes('token=')) {
-            wsUrl += (wsUrl.includes('?') ? '&' : '?') + `token=${encodeURIComponent(this.widgetToken)}`;
-        }
+        // We don't append token to the QS anymore, we'll send it via an "auth" message
 
         console.log(`StarOverlay: Connecting to events at ${wsUrl}`);
         const socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
             console.log("StarOverlay: Event session connected");
-            // Resubscribe to existing topics on reconnection
-            this.subscriptions.forEach(sub => {
-                this.send("subscribe", sub);
-            });
+            // Automatically auth
+            socket.send(JSON.stringify({ type: "auth", token: this.widgetToken }));
         };
 
         socket.onmessage = (event) => {
             try {
                 const payload = JSON.parse(event.data);
+
+                if (payload.type === "auth_ok") {
+                    console.log("StarOverlay: Authentication successful");
+                    // Can perform initialization logic here.
+                    return;
+                }
+
+                if (payload.type === "replay") {
+                    this.emit("sys:events_replay", payload.events);
+                    return;
+                }
 
                 if (payload.event === "integration:event") {
                     const { integrationId, eventId, event: eventData } = payload.data;
