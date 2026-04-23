@@ -1,7 +1,10 @@
 {
   "name": "@staroverlay/sdk",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "",
+  "files": [
+    "dist"
+  ],
   "main": "./dist/staroverlay.mjs",
   "module": "./dist/staroverlay.mjs",
   "types": "./dist/staroverlay.d.ts",
