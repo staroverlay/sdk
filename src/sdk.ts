@@ -9,6 +9,7 @@ export class StarOverlaySDK extends Emitter {
     public preview: boolean;
     public apiUrl: string;
     public uploadContentUrl: string;
+    public eventsUrl: string;
     public enabled: boolean = true;
     public integrations: IIntegration[] = [];
     public error: string | null = null;
@@ -28,6 +29,8 @@ export class StarOverlaySDK extends Emitter {
         this.apiUrl = urlParams.get('apiUrl') ?? import.meta.env.VITE_API_URL ?? "https://api.staroverlay.com";
         // @ts-ignore
         this.uploadContentUrl = urlParams.get('mediaUrl') ?? import.meta.env.VITE_MEDIA_URL ?? "https://cdn.staroverlay.com";
+        // @ts-ignore
+        this.eventsUrl = urlParams.get('eventsUrl') ?? import.meta.env.VITE_EVENTS_URL ?? this.apiUrl;
 
         this.init().catch(err => {
             console.error("StarOverlay: Critical init error", err);
@@ -148,22 +151,16 @@ export class StarOverlaySDK extends Emitter {
     private initSocket() {
         if (!this.widgetToken) return;
 
-        // Use the same host as the API but with the websocket protocol
-        // (Unless overridden via eventsUrl)
-        const urlParams = new URL(window.location.href).searchParams;
-        const eventsUrlStr = urlParams.get('eventsUrl');
-
         let wsUrl: string;
 
-        if (eventsUrlStr) {
-            wsUrl = eventsUrlStr.startsWith('ws')
-                ? eventsUrlStr
-                : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${eventsUrlStr}`;
-        } else {
-            // Derive WS URL from the API URL
-            const url = new URL(this.apiUrl);
+        if (this.eventsUrl.startsWith('ws')) {
+            wsUrl = this.eventsUrl;
+        } else if (this.eventsUrl.startsWith('http')) {
+            const url = new URL(this.eventsUrl);
             const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-            wsUrl = `${protocol}//${url.host}/ws`; // Connecting to /ws on the api/events-server host
+            wsUrl = `${protocol}//${url.host}/ws`;
+        } else {
+            wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${this.eventsUrl}`;
         }
 
         // We don't append token to the QS anymore, we'll send it via an "auth" message
