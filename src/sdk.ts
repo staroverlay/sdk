@@ -23,14 +23,49 @@ export class StarOverlaySDK extends Emitter {
         this.widgetToken = urlParams.get('token');
         this.preview = urlParams.get('preview') === 'true';
 
-        // Resolve API and Media URLs
-        // Falls back to localhost defaults for development if not provided
-        // @ts-ignore
-        this.apiUrl = urlParams.get('apiUrl') ?? import.meta.env.VITE_API_URL ?? "https://api.staroverlay.com";
-        // @ts-ignore
-        this.uploadContentUrl = urlParams.get('mediaUrl') ?? import.meta.env.VITE_MEDIA_URL ?? "https://cdn.staroverlay.com";
-        // @ts-ignore
-        this.eventsUrl = urlParams.get('eventsUrl') ?? import.meta.env.VITE_EVENTS_URL ?? this.apiUrl;
+        const host = window.location.hostname;
+
+        // Environment detection based on hostname
+        const isLocal = host === 'localhost' ||
+            host === '127.0.0.1' ||
+            host.startsWith('192.168.') ||
+            host.startsWith('10.') ||
+            host.startsWith('172.');
+
+        const isDev = host.endsWith('.dev.staroverlay.com');
+
+        // Dynamic Defaults based on environment
+        let defaultApi = "https://api.staroverlay.com";
+        let defaultMedia = "https://cdn.staroverlay.com";
+        let defaultEvents = "https://events.staroverlay.com";
+
+        if (isLocal) {
+            // @ts-ignore
+            defaultApi = import.meta.env?.VITE_LOCAL_API_URL ?? "http://localhost:3000";
+            // @ts-ignore
+            defaultMedia = import.meta.env?.VITE_LOCAL_MEDIA_URL ?? "http://localhost:8787";
+            // @ts-ignore
+            defaultEvents = import.meta.env?.VITE_LOCAL_EVENTS_URL ?? "http://localhost:6500";
+        } else if (isDev) {
+            // @ts-ignore
+            defaultApi = import.meta.env?.VITE_DEV_API_URL ?? "https://api.dev.staroverlay.com";
+            // @ts-ignore
+            defaultMedia = import.meta.env?.VITE_DEV_MEDIA_URL ?? "https://cdn.dev.staroverlay.com";
+            // @ts-ignore
+            defaultEvents = import.meta.env?.VITE_DEV_EVENTS_URL ?? "https://events.dev.staroverlay.com";
+        } else {
+            // @ts-ignore
+            defaultApi = import.meta.env?.VITE_PROD_API_URL ?? "https://api.staroverlay.com";
+            // @ts-ignore
+            defaultMedia = import.meta.env?.VITE_PROD_MEDIA_URL ?? "https://cdn.staroverlay.com";
+            // @ts-ignore
+            defaultEvents = import.meta.env?.VITE_PROD_EVENTS_URL ?? "https://events.staroverlay.com";
+        }
+
+        this.apiUrl = urlParams.get('apiUrl') ?? defaultApi;
+        this.uploadContentUrl = urlParams.get('mediaUrl') ?? defaultMedia;
+        // Priority: param > inferred from apiUrl > defaultEvents
+        this.eventsUrl = urlParams.get('eventsUrl') ?? (urlParams.has('apiUrl') ? this.apiUrl : defaultEvents);
 
         this.init().catch(err => {
             console.error("StarOverlay: Critical init error", err);
