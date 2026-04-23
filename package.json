@@ -1,8 +1,22 @@
 {
   "name": "@staroverlay/sdk",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/staroverlay.mjs",
+  "module": "./dist/staroverlay.mjs",
+  "types": "./dist/staroverlay.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/staroverlay.d.ts",
+      "import": "./dist/staroverlay.mjs",
+      "default": "./dist/staroverlay.mjs"
+    },
+    "./tmi": {
+      "types": "./dist/tmi.d.ts",
+      "import": "./dist/tmi.mjs",
+      "default": "./dist/tmi.mjs"
+    }
+  },
   "scripts": {
     "build": "vite build"
   },
