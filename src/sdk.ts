@@ -32,12 +32,12 @@ export class StarOverlaySDK extends Emitter {
             host.startsWith('10.') ||
             host.startsWith('172.');
 
-        const isDev = host.endsWith('.dev.staroverlay.com');
+        const isDev = host.endsWith('dev.staroverlay.com');
 
         // Dynamic Defaults based on environment
-        let defaultApi = "https://api.staroverlay.com";
-        let defaultMedia = "https://cdn.staroverlay.com";
-        let defaultEvents = "https://events.staroverlay.com";
+        let defaultApi;
+        let defaultMedia;
+        let defaultEvents;
 
         if (isLocal) {
             // @ts-ignore
@@ -48,16 +48,16 @@ export class StarOverlaySDK extends Emitter {
             defaultEvents = import.meta.env?.VITE_LOCAL_EVENTS_URL ?? "http://localhost:6500";
         } else if (isDev) {
             // @ts-ignore
-            defaultApi = import.meta.env?.VITE_DEV_API_URL ?? "https://api.dev.staroverlay.com";
+            defaultApi = import.meta.env?.VITE_DEV_API_URL ?? "https://api-dev.staroverlay.com";
             // @ts-ignore
-            defaultMedia = import.meta.env?.VITE_DEV_MEDIA_URL ?? "https://cdn.dev.staroverlay.com";
+            defaultMedia = import.meta.env?.VITE_DEV_MEDIA_URL ?? "https://uploads-dev.staroverlay.com";
             // @ts-ignore
-            defaultEvents = import.meta.env?.VITE_DEV_EVENTS_URL ?? "https://events.dev.staroverlay.com";
+            defaultEvents = import.meta.env?.VITE_DEV_EVENTS_URL ?? "https://events-dev.staroverlay.com";
         } else {
             // @ts-ignore
             defaultApi = import.meta.env?.VITE_PROD_API_URL ?? "https://api.staroverlay.com";
             // @ts-ignore
-            defaultMedia = import.meta.env?.VITE_PROD_MEDIA_URL ?? "https://cdn.staroverlay.com";
+            defaultMedia = import.meta.env?.VITE_PROD_MEDIA_URL ?? "https://uploads.staroverlay.com";
             // @ts-ignore
             defaultEvents = import.meta.env?.VITE_PROD_EVENTS_URL ?? "https://events.staroverlay.com";
         }
