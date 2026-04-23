@@ -3,7 +3,7 @@ export * from "./chat-types";
 
 export interface IIntegration {
     id: string;
-    type: "twitch";
+    type: "twitch" | "kick" | "youtube" | string;
     username: string;
     avatarURL: string;
 }

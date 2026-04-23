@@ -104,48 +104,8 @@ export class StarOverlaySDK extends Emitter {
             return;
         }
 
-        try {
-            // 1. Fetch initial configuration DIRECTLY from the backend SDK endpoint
-            const configUrl = `${this.apiUrl.replace(/\/$/, '')}/sdk/widget-config?token=${encodeURIComponent(this.widgetToken)}`;
-            const response = await fetch(configUrl);
-
-            if (!response.ok) {
-                throw new Error(`Failed to load widget config: ${response.status}`);
-            }
-
-            const payload = await response.json();
-
-            if (payload.error) {
-                throw new Error(payload.error);
-            }
-
-            const { widget, integrations } = payload;
-
-            this.widget = widget;
-            this.integrations = integrations || [];
-
-            try {
-                this.settings = typeof widget.settings === 'string'
-                    ? JSON.parse(widget.settings)
-                    : (widget.settings || {});
-            } catch (e) {
-                console.error("StarOverlay: Failed to parse widget settings", e);
-                this.settings = {};
-            }
-
-            this.enabled = widget.enabled !== false;
-            this.setState("ok");
-            this.emit("ready", this);
-
-            // 2. Initialize Event WebSocket
-            this.initSocket();
-
-        } catch (err: any) {
-            console.error("StarOverlay: Initialization failed", err);
-            this.error = err.message;
-            this.setState("error");
-            this.emit("error", err);
-        }
+        // Initialize socket immediately, config will be received on auth_ok
+        this.initSocket();
     }
 
     private initSocket() {
@@ -180,7 +140,24 @@ export class StarOverlaySDK extends Emitter {
 
                 if (payload.type === "auth_ok") {
                     console.log("StarOverlay: Authentication successful");
-                    // Can perform initialization logic here.
+
+                    const { widget, integrations } = payload;
+
+                    this.widget = widget;
+                    this.integrations = integrations || [];
+
+                    try {
+                        this.settings = typeof widget.settings === 'string'
+                            ? JSON.parse(widget.settings)
+                            : (widget.settings || {});
+                    } catch (e) {
+                        console.error("StarOverlay: Failed to parse widget settings", e);
+                        this.settings = {};
+                    }
+
+                    this.enabled = widget.enabled !== false;
+                    this.setState("ok");
+                    this.emit("ready", this);
                     return;
                 }
 
